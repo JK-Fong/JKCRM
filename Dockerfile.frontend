@@ -1,0 +1,15 @@
+# 使用官方 Nginx 镜像作为基础镜像
+FROM nginx:stable-alpine
+
+# 将前端构建产物复制到 Nginx 默认的静态文件目录
+COPY frontend/dist /usr/share/nginx/html
+
+# 复制自定义的 Nginx 配置文件
+# 假设我们有一个 nginx.conf 文件用于配置反向代理
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# 暴露 Nginx 默认端口
+EXPOSE 80
+
+# 启动 Nginx
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # 数据库服务
+  mysql:
+    image: mysql:8.0
+    container_name: crm-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password # 生产环境请修改
+      MYSQL_DATABASE: crm_system
+      MYSQL_USER: crm_user
+      MYSQL_PASSWORD: crm_password # 生产环境请修改
+    volumes:
+      # 挂载数据目录，持久化数据
+      - ./mysql/data:/var/lib/mysql
+      # 挂载初始化脚本，启动时自动执行
+      - ./src/main/resources/db_init.sql:/docker-entrypoint-initdb.d/db_init.sql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 后端服务
+  crm-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: crm-backend
+    restart: always
+    environment:
+      # 确保后端连接的是 docker 网络中的 mysql 服务名
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/crm_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: crm_user
+      SPRING_DATASOURCE_PASSWORD: crm_password
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PASSWORD: redis_password # 生产环境请修改
+    ports:
+      - "8080:8080"
+    depends_on:
+      # 确保在后端启动前，数据库和 Redis 已经准备好
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # 缓存服务
+  redis:
+    image: redis:7.0-alpine
+    container_name: crm-redis
+    restart: always
+    command: redis-server --requirepass redis_password # 生产环境请修改
+    volumes:
+      - ./redis/data:/data
+    ports:
+      - "6379:6379"
+
+  # 前端服务 (Nginx)
+  crm-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: crm-frontend
+    restart: always
+    ports:
+      - "80:80" # 映射到宿主机的 80 端口
+    depends_on:
+      - crm-backend
